@@ -1,0 +1,100 @@
+name: Build and Push Docker Image to Artifact Registry
+
+# Propósito de este Workflow:
+# Esto es lo que hace:
+# 1. Pide la máquina prestada (Linux).
+# 2. Se autentica en Google Cloud usando seguridad WIF (tokens seguros).
+# 3. Construye la imagen de Docker.
+# 4. Sube la imagen a Artifact Registry en GCP.
+#
+# (AQUÍ SE DETIENE). No "levanta" el servidor, no actualiza la web. Solo asegura que la imagen ya está en Google Cloud disponible para usarse.
+#
+# Ejemplo de cómo llamarlo desde el repositorio destino:
+# -------------------------------------------------------------------
+# name: Build and Push Docker to GCP Artifact Registry
+# on:
+#   push:
+#     branches: [ "main" ]
+#
+# jobs:
+#   docker-gcp-build:
+#     uses: tu-usuario/tu-repo/.github/workflows/build-and-push-to-artifact-registry.yml@main
+#     with:
+#       image_name: 'mi-worker'
+#       artifact_registry_region: 'us-central1'
+#       artifact_registry_repository: 'mis-repos'
+#     secrets:
+#       gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
+#       gcp_workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+#       gcp_service_account: ${{ secrets.GCP_SA_EMAIL }}
+# -------------------------------------------------------------------
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      dockerfile_path:
+        required: false
+        type: string
+        default: "./Dockerfile"
+      artifact_registry_region:
+        required: true
+        type: string
+      artifact_registry_repository:
+        required: true
+        type: string
+    secrets:
+      gcp_project_id:
+        required: true
+      gcp_workload_identity_provider:
+        required: true
+      gcp_service_account:
+        required: true
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    outputs:
+      image_url: ${{ steps.meta.outputs.images }}@${{ steps.build-and-push.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: ${{ secrets.gcp_workload_identity_provider }}
+          service_account: ${{ secrets.gcp_service_account }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ inputs.artifact_registry_region }}-docker.pkg.dev --quiet
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.artifact_registry_region }}-docker.pkg.dev/${{ secrets.gcp_project_id }}/${{ inputs.artifact_registry_repository }}/${{ inputs.image_name }}
+          tags: |
+            type=sha,format=short
+            latest
+
+      - name: Build and push
+        id: build-and-push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ inputs.dockerfile_path }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

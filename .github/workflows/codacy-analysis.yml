@@ -1,0 +1,90 @@
+name: Codacy code review
+
+# Propósito de este Workflow:
+# Este flujo realiza un análisis estático de calidad y seguridad del código:
+# 1. Ejecuta la herramienta CLI de Codacy sobre el código fuente.
+# 2. Genera un reporte de problemas en formato estándar SARIF.
+# 3. Procesa el archivo SARIF para evitar conflictos de categorías duplicadas.
+# 4. Sube los resultados a la pestaña "Security > Code scanning" de GitHub.
+# NOTA: Está configurado para registrar errores sin detener la ejecución de otros procesos.
+#
+# Ejemplo de cómo llamarlo desde el repositorio destino:
+# -------------------------------------------------------------------
+# name: Code Quality Analysis
+# on:
+#   push:
+#     branches: [ "main" ]
+#   pull_request:
+#     branches: [ "main" ]
+#
+# jobs:
+#   codacy-security:
+#     uses: tu-usuario/tu-repo/.github/workflows/codacy-analysis.yml@main
+#     secrets:
+#       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+# -------------------------------------------------------------------
+
+on:
+  workflow_call:
+    secrets:
+      CODACY_PROJECT_TOKEN:
+        required: true
+
+jobs:
+  codacy-analysis:
+    name: Codacy Static Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Codacy Analysis CLI
+        uses: codacy/codacy-analysis-cli-action@v4
+        continue-on-error: true
+        with:
+          max-allowed-issues: 0
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          verbose: true
+          gh-code-scanning-compat: true
+          # Esto genera un reporte que GitHub puede leer nativamente
+          output: results.sarif
+          format: sarif
+          fail-if-incomplete: false
+
+      - name: Check for analysis results
+        id: check_files
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "results.sarif"
+
+      - name: Make SARIF categories unique
+        if: steps.check_files.outputs.files_exists == 'true'
+        shell: bash
+        run: |
+          jq '
+            .runs = [
+              .runs | group_by(.tool.driver.name)[] |
+              if (length > 1) then
+                ( to_entries | map(.value.tool.driver.name = (.value.tool.driver.name + " (" + (.key + 1|tostring) + ")")) | .[].value )
+              else
+                .[]
+              end
+            ]
+          ' results.sarif > processed-results.sarif
+          echo "SARIF file processed to make categories unique."
+
+      - name: Upload SARIF results to GitHub
+        if: steps.check_files.outputs.files_exists == 'true'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: processed-results.sarif
+
+      - name: Upload Processed SARIF as artifact
+        if: always() && steps.check_files.outputs.files_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sarif-report-processed
+          path: processed-results.sarif

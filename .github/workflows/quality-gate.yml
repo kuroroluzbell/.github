@@ -1,0 +1,34 @@
+name: Global Quality Gate
+
+on:
+  workflow_call:
+    inputs:
+      coverage_file:
+        description: "Ruta al archivo de reporte (cobertura.xml, lcov.info, etc.)"
+        required: true
+        type: string
+      minimum_coverage:
+        default: 80
+        type: number
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Code Coverage Summary Report
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: ${{ inputs.coverage_file }}
+          badge: true
+          fail_below_min: true # AQUÍ es donde el pipeline falla si no cumple
+          format: markdown
+          output: both
+          thresholds: ${{ inputs.minimum_coverage }}
+
+      - name: Add Coverage PR Comment
+        uses: marooned/github-action-annotate-pr@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          body: "📊 El reporte de cobertura ha sido validado."
