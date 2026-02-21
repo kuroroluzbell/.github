@@ -3,11 +3,15 @@ name: Codacy Test Coverage Reporter
 # Propósito de este Workflow:
 # Este flujo SOLO envía los resultados de tus pruebas (cobertura) a Codacy.
 # 1. Recibe el archivo de cobertura generado por tus tests (ej. jacoco, lcov).
-# 2. Se autentica con Codacy usando tu Token.
+# 2. Se autentica con Codacy usando tu Token (Project o Account).
 # 3. Envía el reporte para que Codacy pueda bloquear PRs si la cobertura baja.
 #
 # IMPORTANTE: Tus propios workflows deben correr los tests PRIMERO,
 # generar el coverage, SUBIRLO COMO ARTIFACT, y luego invocar este archivo.
+#
+# Puedes usar uno de dos tipos de token:
+# - CODACY_PROJECT_TOKEN: Un token por proyecto (en Project API settings)
+# - CODACY_API_TOKEN: Un token de cuenta (en Account API settings)
 #
 # Ejemplo de cómo llamarlo desde tu API en Java:
 # -------------------------------------------------------------------
@@ -45,7 +49,10 @@ name: Codacy Test Coverage Reporter
 #     with:
 #       coverage_report_path: 'target/site/jacoco/jacoco.xml'
 #     secrets:
+#       # OPCION 1: Project Token (un token por proyecto)
 #       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+#       # OPCION 2: Account Token (un token para todos los proyectos)
+#       CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
 #
 # Ejemplo de cómo llamarlo desde tu frontend en React (usando Jest):
 # -------------------------------------------------------------------
@@ -65,7 +72,10 @@ name: Codacy Test Coverage Reporter
 #     with:
 #       coverage_report_path: 'coverage/lcov.info'
 #     secrets:
+#       # OPCION 1: Project Token (un token por proyecto)
 #       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+#       # OPCION 2: Account Token (un token para todos los proyectos)
+#       CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
 # -------------------------------------------------------------------
 
 on:
@@ -82,7 +92,9 @@ on:
         default: coverage-report
     secrets:
       CODACY_PROJECT_TOKEN:
-        required: true
+        required: false
+      CODACY_API_TOKEN:
+        required: false
 
 jobs:
   report-coverage:
@@ -104,8 +116,18 @@ jobs:
           COVERAGE_FILE=$(basename "${{ inputs.coverage_report_path }}")
           echo "file=$COVERAGE_FILE" >> $GITHUB_OUTPUT
 
-      - name: Run Codacy Coverage Reporter
+      - name: Run Codacy Coverage Reporter (Project Token)
+        if: secrets.CODACY_PROJECT_TOKEN != ''
         uses: codacy/codacy-coverage-reporter-action@v1
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: ${{ steps.coverage.outputs.file }}
+
+      - name: Run Codacy Coverage Reporter (Account Token)
+        if: secrets.CODACY_API_TOKEN != ''
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          api-token: ${{ secrets.CODACY_API_TOKEN }}
+          username: ${{ github.repository_owner }}
+          project-name: ${{ github.repository }}
           coverage-reports: ${{ steps.coverage.outputs.file }}
