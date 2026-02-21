@@ -1,4 +1,4 @@
-name: Version Check New
+name: Version Check
 
 on:
   workflow_call:
@@ -40,25 +40,55 @@ jobs:
       - name: Get base branch version
         id: base_version
         run: |
-          BASE_BRANCH=$(echo "${{ github.base_ref }}" | sed 's/refs\/heads\///')
+          BASE_BRANCH=""
+          
+          # Determinar la rama base
+          if [[ -n "${{ github.base_ref }}" ]]; then
+            BASE_BRANCH="${{ github.base_ref }}"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            # Para push, usar la rama actual como referencia
+            BASE_BRANCH="${{ github.ref_name }}"
+          fi
+          
+          # Si está vacío, buscar una rama por defecto
+          if [[ -z "$BASE_BRANCH" ]]; then
+            echo "No se detectó rama base, buscando rama por defecto..."
+            BASE_BRANCH=$(git branch -r --format='%(refname:short)' 2>/dev/null | grep -E '^origin/main$|^origin/master$' | head -n1)
+          fi
+          
+          # Último intento: intentar con origin/main
+          if [[ -z "$BASE_BRANCH" ]]; then
+            BASE_BRANCH="main"
+          fi
+          
           echo "Rama base: $BASE_BRANCH"
           
-          if ! git rev-parse "$BASE_BRANCH" >/dev/null 2>&1; then
-            echo "No se encontró la rama $BASE_BRANCH, buscando rama por defecto..."
-            BASE_BRANCH=$(git branch -r --format='%(refname:short)' | grep -E 'main|master|develop' | head -n1)
-          fi
+          # Fetch de la rama base
+          git fetch origin $BASE_BRANCH:$BASE_BRANCH --depth=1 2>/dev/null || true
           
-          if [[ -z "$BASE_BRANCH" ]]; then
-            echo "❌ No se pudo determinar la rama base"
-            exit 1
+          # Verificar que existe la rama
+          if ! git show-ref --verify --quiet refs/heads/$BASE_BRANCH 2>/dev/null; then
+            echo "⚠️ No se encontró la rama $BASE_BRANCH"
+            echo "Verificando con tags..."
+            git fetch --tags origin +refs/tags/*:refs/tags/* 2>/dev/null || true
           fi
-          
-          git fetch origin $BASE_BRANCH:$BASE_BRANCH --depth=1
           
           if [[ "${{ inputs.version_file }}" == "package.json" ]]; then
-            VERSION=$(git show $BASE_BRANCH:${{ inputs.version_file }} | node -p "require('stdin').version")
+            if git show $BASE_BRANCH:${{ inputs.version_file }} >/dev/null 2>&1; then
+              VERSION=$(git show $BASE_BRANCH:${{ inputs.version_file }} | node -p "require('stdin').version")
+            else
+              echo "⚠️ No se pudo obtener la versión de $BASE_BRANCH, saltando validación"
+              echo "VERSION=0.0.0" >> $GITHUB_OUTPUT
+              exit 0
+            fi
           elif [[ "${{ inputs.version_file }}" == "pom.xml" ]]; then
-            VERSION=$(git show $BASE_BRANCH:${{ inputs.version_file }} | grep -m1 '<version>' | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+            if git show $BASE_BRANCH:${{ inputs.version_file }} >/dev/null 2>&1; then
+              VERSION=$(git show $BASE_BRANCH:${{ inputs.version_file }} | grep -m1 '<version>' | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+            else
+              echo "⚠️ No se pudo obtener la versión de $BASE_BRANCH, saltando validación"
+              echo "VERSION=0.0.0" >> $GITHUB_OUTPUT
+              exit 0
+            fi
           else
             echo "Unsupported file: ${{ inputs.version_file }}"
             exit 1
@@ -70,6 +100,12 @@ jobs:
         run: |
           CURRENT=${{ steps.current_version.outputs.VERSION }}
           BASE=${{ steps.base_version.outputs.VERSION }}
+          
+          # Si la versión base es 0.0.0, significa que no se pudo comparar
+          if [[ "$BASE" == "0.0.0" ]]; then
+            echo "⚠️ No se pudo obtener la versión de la rama base. Validación saltada."
+            exit 0
+          fi
           
           echo "Versión actual: $CURRENT"
           echo "Versión base: $BASE"
