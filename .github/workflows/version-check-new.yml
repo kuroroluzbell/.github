@@ -1,0 +1,78 @@
+name: Version Check New
+
+on:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN_CUSTOM:
+        required: true
+    inputs:
+      version_file:
+        description: 'The file containing the version number (e.g., pom.xml, package.json)'
+        required: true
+        type: string
+
+jobs:
+  check-version-bump:
+    name: Revisar versión New
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN_CUSTOM }}
+
+      - name: Get current version
+        id: current_version
+        run: |
+          if [[ "${{ inputs.version_file }}" == "package.json" ]]; then
+            VERSION=$(node -p "require('./${{ inputs.version_file }}').version")
+          elif [[ "${{ inputs.version_file }}" == "pom.xml" ]]; then
+            VERSION=$(grep -m1 '<version>' ${{ inputs.version_file }} | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+          else
+            echo "Unsupported file: ${{ inputs.version_file }}"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Get base branch version
+        id: base_version
+        run: |
+          git fetch origin main:main --depth=1
+          
+          if [[ "${{ inputs.version_file }}" == "package.json" ]]; then
+            VERSION=$(git show main:${{ inputs.version_file }} | node -p "require('stdin').version")
+          elif [[ "${{ inputs.version_file }}" == "pom.xml" ]]; then
+            VERSION=$(git show main:${{ inputs.version_file }} | grep -m1 '<version>' | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+          else
+            echo "Unsupported file: ${{ inputs.version_file }}"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Base version: $VERSION"
+
+      - name: Compare versions
+        run: |
+          CURRENT=${{ steps.current_version.outputs.VERSION }}
+          BASE=${{ steps.base_version.outputs.VERSION }}
+          
+          echo "Versión actual: $CURRENT"
+          echo "Versión base: $BASE"
+          
+          # Comparar versiones usando sort -V (version sort)
+          if [[ $(echo -e "$BASE\n$CURRENT" | sort -V | head -n1) != "$BASE" ]] && [[ "$CURRENT" != "$BASE" ]]; then
+            # La versión actual es menor que la base (rama desactualizada)
+            echo "⚠️ Tu rama está desactualizada. La versión en main es mayor ($BASE)"
+            echo "Debes hacer merge o rebase de main antes de crear el PR"
+            exit 1
+          fi
+          
+          if [[ "$CURRENT" == "$BASE" ]]; then
+            echo "❌ No se detectó cambio de versión"
+            echo "Debes incrementar la versión en ${{ inputs.version_file }} antes de hacer el PR"
+            exit 1
+          fi
+          
+          echo "✅ Versión incrementada: $BASE → $CURRENT"
