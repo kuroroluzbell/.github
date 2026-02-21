@@ -121,8 +121,6 @@ jobs:
         run: |
           if [ -n "${{ secrets.CODACY_PROJECT_TOKEN }}" ]; then
             echo "type=project" >> $GITHUB_OUTPUT
-          elif [ -n "${{ secrets.CODACY_API_TOKEN }}" ]; then
-            echo "type=account" >> $GITHUB_OUTPUT
           fi
 
       - name: Run Codacy Coverage Reporter (Project Token)
