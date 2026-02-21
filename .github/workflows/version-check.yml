@@ -49,6 +49,7 @@ jobs:
         with:
           file-name: ${{ inputs.version_file }}
           token: ${{ secrets.GITHUB_TOKEN_CUSTOM }}
+          diff-search: true
       - name: 'Fail if version not updated'
         if: steps.check-version.outputs.changed == 'false'
         run: |
