@@ -18,13 +18,13 @@ name: Version Check
 #     with:
 #       version_file: 'pom.xml'
 #     secrets:
-#       github_token: ${{ secrets.GITHUB_TOKEN }}
+#       GITHUB_TOKEN_CUSTOM: ${{ secrets.GITHUB_TOKEN }}
 # -------------------------------------------------------------------
 
 on:
   workflow_call:
     secrets:
-      github_token:
+      GITHUB_TOKEN_CUSTOM:
         required: true
     inputs:
       version_file:
@@ -46,5 +46,5 @@ jobs:
         uses: 'endeveit/version-check@v10'
         with:
           file-name: ${{ inputs.version_file }}
-          token: ${{ secrets.github_token }}
+          token: ${{ secrets.GITHUB_TOKEN_CUSTOM }}
 
