@@ -13,9 +13,14 @@ name: Codacy code review
 # name: Code Quality Analysis
 # on:
 #   push:
-#     branches: [ "main" ]
+#     # Se ejecuta al hacer push a cualquier rama EXCEPTO main y qa
+#     branches-ignore:
+#       - main
+#       - qa
 #   pull_request:
-#     branches: [ "main" ]
+#     # Se ejecuta al abrir (o actualizar) un PR hacia develop
+#     branches:
+#       - develop
 #
 # jobs:
 #   codacy-security:
