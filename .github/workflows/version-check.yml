@@ -44,7 +44,7 @@ jobs:
           fetch-depth: 0
 
       - name: 'Check if version was bumped'
-        uses: 'endeveit/version-check@v10'
+        uses: 'EndBug/version-check@v10 '
         with:
           file-name: ${{ inputs.version_file }}
           token: ${{ secrets.GITHUB_TOKEN_CUSTOM }}
