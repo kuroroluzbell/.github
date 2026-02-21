@@ -10,6 +10,11 @@ on:
         description: 'The file containing the version number (e.g., pom.xml, package.json)'
         required: true
         type: string
+      base_branch:
+        description: 'Base branch to compare version (default: develop)'
+        required: false
+        type: string
+        default: 'develop'
 
 jobs:
   check-version-bump:
@@ -40,26 +45,8 @@ jobs:
       - name: Get base branch version
         id: base_version
         run: |
-          BASE_BRANCH=""
-          
-          # Determinar la rama base
-          if [[ -n "${{ github.base_ref }}" ]]; then
-            BASE_BRANCH="${{ github.base_ref }}"
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            # Para push, usar la rama actual como referencia
-            BASE_BRANCH="${{ github.ref_name }}"
-          fi
-          
-          # Si está vacío, buscar una rama por defecto
-          if [[ -z "$BASE_BRANCH" ]]; then
-            echo "No se detectó rama base, buscando rama por defecto..."
-            BASE_BRANCH=$(git branch -r --format='%(refname:short)' 2>/dev/null | grep -E '^origin/main$|^origin/master$' | head -n1)
-          fi
-          
-          # Último intento: intentar con origin/main
-          if [[ -z "$BASE_BRANCH" ]]; then
-            BASE_BRANCH="main"
-          fi
+          # Usar la rama configurada o develop por defecto
+          BASE_BRANCH="${{ inputs.base_branch }}"
           
           echo "Rama base: $BASE_BRANCH"
           
