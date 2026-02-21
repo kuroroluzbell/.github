@@ -98,8 +98,14 @@ jobs:
           name: ${{ inputs.coverage_artifact_name }}
           path: .
 
+      - name: Get coverage file name
+        id: coverage
+        run: |
+          COVERAGE_FILE=$(basename "${{ inputs.coverage_report_path }}")
+          echo "file=$COVERAGE_FILE" >> $GITHUB_OUTPUT
+
       - name: Run Codacy Coverage Reporter
         uses: codacy/codacy-coverage-reporter-action@v1
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          coverage-reports: ${{ inputs.coverage_report_path }}
+          coverage-reports: ${{ steps.coverage.outputs.file }}
