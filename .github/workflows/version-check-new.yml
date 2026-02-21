@@ -75,7 +75,9 @@ jobs:
           
           if [[ "${{ inputs.version_file }}" == "package.json" ]]; then
             if git show $BASE_BRANCH:${{ inputs.version_file }} >/dev/null 2>&1; then
-              VERSION=$(git show $BASE_BRANCH:${{ inputs.version_file }} | node -p "require('stdin').version")
+              git show $BASE_BRANCH:${{ inputs.version_file }} > /tmp/base_package.json
+              VERSION=$(node -p "require('/tmp/base_package.json').version")
+              rm /tmp/base_package.json
             else
               echo "⚠️ No se pudo obtener la versión de $BASE_BRANCH, saltando validación"
               echo "VERSION=0.0.0" >> $GITHUB_OUTPUT
