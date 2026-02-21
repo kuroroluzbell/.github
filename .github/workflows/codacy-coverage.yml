@@ -116,15 +116,24 @@ jobs:
           COVERAGE_FILE=$(basename "${{ inputs.coverage_report_path }}")
           echo "file=$COVERAGE_FILE" >> $GITHUB_OUTPUT
 
+      - name: Check which token is available
+        id: token_check
+        run: |
+          if [ -n "${{ secrets.CODACY_PROJECT_TOKEN }}" ]; then
+            echo "type=project" >> $GITHUB_OUTPUT
+          elif [ -n "${{ secrets.CODACY_API_TOKEN }}" ]; then
+            echo "type=account" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run Codacy Coverage Reporter (Project Token)
-        if: secrets.CODACY_PROJECT_TOKEN != ''
+        if: steps.token_check.outputs.type == 'project'
         uses: codacy/codacy-coverage-reporter-action@v1
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: ${{ steps.coverage.outputs.file }}
 
       - name: Run Codacy Coverage Reporter (Account Token)
-        if: secrets.CODACY_API_TOKEN != ''
+        if: steps.token_check.outputs.type == 'account'
         uses: codacy/codacy-coverage-reporter-action@v1
         with:
           api-token: ${{ secrets.CODACY_API_TOKEN }}
