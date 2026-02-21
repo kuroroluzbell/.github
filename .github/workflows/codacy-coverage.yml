@@ -7,7 +7,7 @@ name: Codacy Test Coverage Reporter
 # 3. Envía el reporte para que Codacy pueda bloquear PRs si la cobertura baja.
 #
 # IMPORTANTE: Tus propios workflows deben correr los tests PRIMERO,
-# y luego invocar este archivo pasándole la ruta del reporte.
+# generar el coverage, SUBIRLO COMO ARTIFACT, y luego invocar este archivo.
 #
 # Ejemplo de cómo llamarlo desde tu API en Java:
 # -------------------------------------------------------------------
@@ -32,26 +32,40 @@ name: Codacy Test Coverage Reporter
 #       - name: Ejecutar Tests (Genera jacoco.xml)
 #         run: mvn clean test jacoco:report
 #
-#       - name: Subir Cobertura a Codacy
-#         uses: tu-usuario/tu-repo/.github/workflows/codacy-coverage.yml@main
+#       - name: Upload coverage report
+#         uses: actions/upload-artifact@v4
 #         with:
-#           # La ruta donde Maven dejó el archivo de cobertura
-#           coverage_report_path: 'target/site/jacoco/jacoco.xml'
-#         secrets:
-#           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+#           name: coverage-report
+#           path: target/site/jacoco/jacoco.xml
+#           retention-days: 1
+#
+#   cobertura:
+#     needs: build_and_test
+#     uses: tu-usuario/tu-repo/.github/workflows/codacy-coverage.yml@main
+#     with:
+#       coverage_report_path: 'target/site/jacoco/jacoco.xml'
+#     secrets:
+#       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
 #
 # Ejemplo de cómo llamarlo desde tu frontend en React (usando Jest):
 # -------------------------------------------------------------------
 #       - name: Run Tests (Jest)
 #         run: npm run test -- --coverage
 #
-#       - name: Subir Cobertura a Codacy
-#         uses: tu-usuario/tu-repo/.github/workflows/codacy-coverage.yml@main
+#       - name: Upload coverage report
+#         uses: actions/upload-artifact@v4
 #         with:
-#           # La ruta donde Jest por defecto deja el archivo LCOV
-#           coverage_report_path: 'coverage/lcov.info'
-#         secrets:
-#           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+#           name: coverage-report
+#           path: coverage/lcov.info
+#           retention-days: 1
+#
+#   cobertura:
+#     needs: build_and_test
+#     uses: tu-usuario/tu-repo/.github/workflows/codacy-coverage.yml@main
+#     with:
+#       coverage_report_path: 'coverage/lcov.info'
+#     secrets:
+#       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
 # -------------------------------------------------------------------
 
 on:
@@ -61,6 +75,11 @@ on:
         description: 'Ruta al archivo de reporte de cobertura (ej: target/site/jacoco/jacoco.xml o coverage/lcov.info)'
         required: true
         type: string
+      coverage_artifact_name:
+        description: 'Nombre del artifact de coverage (default: coverage-report)'
+        required: false
+        type: string
+        default: coverage-report
     secrets:
       CODACY_PROJECT_TOKEN:
         required: true
@@ -72,6 +91,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.coverage_artifact_name }}
+          path: .
 
       - name: Run Codacy Coverage Reporter
         uses: codacy/codacy-coverage-reporter-action@v1
