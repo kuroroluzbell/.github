@@ -44,8 +44,15 @@ jobs:
           fetch-depth: 0
 
       - name: 'Check if version was bumped'
+        id: check-version
         uses: 'EndBug/version-check@latest'
         with:
           file-name: ${{ inputs.version_file }}
           token: ${{ secrets.GITHUB_TOKEN_CUSTOM }}
+      - name: 'Fail if version not updated'
+        if: steps.check-version.outputs.changed == 'false'
+        run: |
+          echo "❌ No se detectó cambio de versión en ${{ inputs.version_file }}"
+          echo "Debes incrementar la versión antes de hacer el PR"
+          exit 1
 
