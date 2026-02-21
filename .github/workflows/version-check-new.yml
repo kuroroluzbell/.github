@@ -13,7 +13,7 @@ on:
 
 jobs:
   check-version-bump:
-    name: Revisar versión New
+    name: Revisar versión
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -40,12 +40,25 @@ jobs:
       - name: Get base branch version
         id: base_version
         run: |
-          git fetch origin main:main --depth=1
+          BASE_BRANCH=$(echo "${{ github.base_ref }}" | sed 's/refs\/heads\///')
+          echo "Rama base: $BASE_BRANCH"
+          
+          if ! git rev-parse "$BASE_BRANCH" >/dev/null 2>&1; then
+            echo "No se encontró la rama $BASE_BRANCH, buscando rama por defecto..."
+            BASE_BRANCH=$(git branch -r --format='%(refname:short)' | grep -E 'main|master|develop' | head -n1)
+          fi
+          
+          if [[ -z "$BASE_BRANCH" ]]; then
+            echo "❌ No se pudo determinar la rama base"
+            exit 1
+          fi
+          
+          git fetch origin $BASE_BRANCH:$BASE_BRANCH --depth=1
           
           if [[ "${{ inputs.version_file }}" == "package.json" ]]; then
-            VERSION=$(git show main:${{ inputs.version_file }} | node -p "require('stdin').version")
+            VERSION=$(git show $BASE_BRANCH:${{ inputs.version_file }} | node -p "require('stdin').version")
           elif [[ "${{ inputs.version_file }}" == "pom.xml" ]]; then
-            VERSION=$(git show main:${{ inputs.version_file }} | grep -m1 '<version>' | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+            VERSION=$(git show $BASE_BRANCH:${{ inputs.version_file }} | grep -m1 '<version>' | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
           else
             echo "Unsupported file: ${{ inputs.version_file }}"
             exit 1
@@ -61,11 +74,9 @@ jobs:
           echo "Versión actual: $CURRENT"
           echo "Versión base: $BASE"
           
-          # Comparar versiones usando sort -V (version sort)
           if [[ $(echo -e "$BASE\n$CURRENT" | sort -V | head -n1) != "$BASE" ]] && [[ "$CURRENT" != "$BASE" ]]; then
-            # La versión actual es menor que la base (rama desactualizada)
-            echo "⚠️ Tu rama está desactualizada. La versión en main es mayor ($BASE)"
-            echo "Debes hacer merge o rebase de main antes de crear el PR"
+            echo "⚠️ Tu rama está desactualizada. La versión en ${{ github.base_ref }} es mayor ($BASE)"
+            echo "Debes hacer merge o rebase de ${{ github.base_ref }} antes de crear el PR"
             exit 1
           fi
           
