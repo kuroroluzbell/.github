@@ -1,0 +1,59 @@
+name: Version Check
+
+# Propósito de este Workflow:
+# Este flujo verifica que se haya incrementado la versión del artefacto
+# (ej. en pom.xml o package.json) en un Pull Request antes de poder hacer merge.
+# Si el desarrollador no subió la versión, el check fallará y bloqueará el PR.
+#
+# Ejemplo de cómo llamarlo desde el repositorio destino (tu API Java):
+# -------------------------------------------------------------------
+# name: PR Version Check
+# on:
+#   pull_request:
+#     types: [opened, synchronize, reopened]
+#
+# jobs:
+#   verify-version:
+#     uses: tu-usuario/tu-repo/.github/workflows/version-check.yml@main
+#     with:
+#       version_file: 'pom.xml'
+#     secrets:
+#       GITHUB_TOKEN_CUSTOM: ${{ secrets.GITHUB_TOKEN }}
+# -------------------------------------------------------------------
+
+on:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN_CUSTOM:
+        required: true
+    inputs:
+      version_file:
+        description: 'The file containing the version number (e.g., pom.xml, package.json).'
+        required: true
+        type: string
+
+jobs:
+  check-version-bump:
+    name: revisar version
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history so the action can compare against the base branch
+          fetch-depth: 0
+
+      - name: 'Check if version was bumped'
+        id: check-version
+        uses: 'EndBug/version-check@latest'
+        with:
+          file-name: ${{ inputs.version_file }}
+          token: ${{ secrets.GITHUB_TOKEN_CUSTOM }}
+          diff-search: true
+      - name: 'Fail if version not updated'
+        if: steps.check-version.outputs.changed == 'false'
+        run: |
+          echo "❌ No se detectó cambio de versión en ${{ inputs.version_file }}"
+          echo "Debes incrementar la versión antes de hacer el PR"
+          exit 1
+

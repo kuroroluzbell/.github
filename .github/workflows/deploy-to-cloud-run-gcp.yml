@@ -1,0 +1,72 @@
+name: Deploy to Cloud Run
+
+# Propósito de este Workflow:
+# Este flujo SOLO despliega una imagen previamente construida.
+# 1. Pide la máquina prestada (Linux).
+# 2. Se autentica en Google Cloud usando seguridad WIF.
+# 3. Toma una URL de imagen existente en Artifact Registry.
+# 4. Inicia el despliegue directo a Cloud Run.
+#
+# Ejemplo de cómo llamarlo desde el repositorio destino:
+# -------------------------------------------------------------------
+# name: Deploy Existing Image to Cloud Run
+# on:
+#   workflow_dispatch: # Ejecución manual
+#
+# jobs:
+#   deploy-only:
+#     uses: tu-usuario/tu-repo/.github/workflows/deploy-to-cloud-run-gcp.yml@main
+#     with:
+#       gcp_region: 'us-central1'
+#       service_name: 'mi-api-service'
+#       image_url: 'us-central1-docker.pkg.dev/mi-proyecto/mis-repos/mi-imagen:latest'
+#     secrets:
+#       gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
+#       gcp_workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+#       gcp_service_account: ${{ secrets.GCP_SA_EMAIL }}
+# -------------------------------------------------------------------
+
+on:
+  workflow_call:
+    inputs:
+      gcp_region:
+        required: true
+        type: string
+      service_name:
+        required: true
+        type: string
+      image_url:
+        required: true
+        type: string
+    secrets:
+      gcp_project_id:
+        required: true
+      gcp_workload_identity_provider:
+        required: true
+      gcp_service_account:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: ${{ secrets.gcp_workload_identity_provider }}
+          service_account: ${{ secrets.gcp_service_account }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ inputs.service_name }}
+          region: ${{ inputs.gcp_region }}
+          image: ${{ inputs.image_url }}
+          flags: --memory=512Mi
