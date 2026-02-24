@@ -1,0 +1,246 @@
+name: ✍️ Issue Quality Enhancer
+
+on:
+  issues:
+    types: [opened]
+  workflow_call:
+    inputs:
+      issue_number:
+        description: 'Issue number to enhance'
+        required: true
+        type: string
+      issue_title:
+        description: 'Issue title'
+        required: true
+        type: string
+      issue_body:
+        description: 'Issue body'
+        required: false
+        type: string
+        default: ''
+      issue_author:
+        description: 'Issue author login'
+        required: true
+        type: string
+    secrets:
+      COPILOT_PAT:
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  enhance-issue:
+    name: ✍️ Enhance Issue Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔐 Verify author is repo owner
+        id: author_check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          INPUT_AUTHOR: ${{ inputs.issue_author }}
+        run: |
+          author="$ISSUE_AUTHOR"
+          if [ "$EVENT_NAME" = "workflow_call" ]; then
+            author="$INPUT_AUTHOR"
+          fi
+
+          allowed="false"
+          if [ "$author" = "$REPO_OWNER" ]; then
+            allowed="true"
+          fi
+
+          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+          if [ "$allowed" != "true" ]; then
+            echo "Skipping: author $author is not repository owner $REPO_OWNER."
+          fi
+
+      - name: 📥 Checkout repository
+        if: ${{ steps.author_check.outputs.allowed == 'true' }}
+        uses: actions/checkout@v4
+
+      - name: 📦 Install GitHub Copilot CLI
+        if: ${{ steps.author_check.outputs.allowed == 'true' }}
+        run: |
+          curl -fsSL https://gh.io/copilot-install | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: ✍️ Enhance issue title and body
+        if: ${{ steps.author_check.outputs.allowed == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+          ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
+          ISSUE_TITLE: ${{ inputs.issue_title || github.event.issue.title }}
+          ISSUE_BODY: ${{ inputs.issue_body || github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ inputs.issue_author || github.event.issue.user.login }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+
+          copilot -p "
+          You are an expert Issue Quality Enhancer for the repository '${{ github.repository }}'.
+          Your job is to take a newly opened issue and improve its quality so it is clear, detailed,
+          well-structured, and consistent with the project standards.
+
+          ISSUE DETAILS:
+          - Number: #$ISSUE_NUMBER
+          - Author: @$ISSUE_AUTHOR
+          - Original Title: $ISSUE_TITLE
+          - Original Body: $ISSUE_BODY
+
+          Follow these steps IN ORDER:
+
+          ──────────────────────────────────────────────
+          STEP 1 — UNDERSTAND THE PROJECT CONTEXT
+          ──────────────────────────────────────────────
+          - Read the repository README to understand what this project is about.
+          - Read the AGENTS.md file for additional context about best practices.
+          - Scan the source code structure to know what modules, files and technologies exist.
+          - Use the GitHub MCP Server to list the last 10 closed and open issues in this repository
+            so you can learn the naming conventions, language and structure used.
+
+          ──────────────────────────────────────────────
+          STEP 2 — UNDERSTAND THE LABELS
+          ──────────────────────────────────────────────
+          - Use the GitHub MCP Server to list ALL available labels in this repository.
+          - Save this list — you will need it later to assign labels.
+
+          ──────────────────────────────────────────────
+          STEP 3 — DETECT LANGUAGE & TRANSLATE
+          ──────────────────────────────────────────────
+          - Detect the language of the original title and body.
+          - This project uses ENGLISH for all issues.
+          - If the title or body are in ANY language other than English (e.g., Spanish, French, etc.),
+            translate the content to clear, professional English.
+          - Preserve the original meaning and technical details during translation.
+
+          ──────────────────────────────────────────────
+          STEP 4 — ENHANCE THE TITLE
+          ──────────────────────────────────────────────
+          Create a new, improved title following these rules:
+          - Start with a relevant emoji that represents the issue type:
+            🐛 for bugs, ✨ for features/enhancements, 📝 for docs, 🎨 for design/visual,
+            🖼️ for branding, 🐍 for Python code, 📊 for slides, 🤖 for Copilot skill,
+            🎭 for agents, 🔤 for typography, 🖌️ for icons, 🗒️ for speaker notes,
+            🔧 for refactoring, 📦 for renderers, 🔒 for security, ⚡ for performance
+          - Keep it concise but descriptive (5-12 words after the emoji)
+          - Use imperative mood (e.g., 'Add dark mode support' not 'Adding dark mode support')
+          - Do NOT include issue type prefixes like '[BUG]' or '[FEATURE]' — the emoji replaces those
+
+          ──────────────────────────────────────────────
+          STEP 5 — ENHANCE THE BODY
+          ──────────────────────────────────────────────
+          Rewrite the issue body using this structure. Adapt sections based on issue type:
+
+          **For Bug Reports:**
+          \`\`\`
+          ## 🐛 Description
+          Clear description of what's broken.
+
+          ## 📋 Steps to Reproduce
+          1. Step one
+          2. Step two
+          3. ...
+
+          ## ✅ Expected Behavior
+          What should happen.
+
+          ## ❌ Actual Behavior
+          What happens instead.
+
+          ## 🖥️ Environment (if applicable)
+          - OS:
+          - Python version:
+          - Dependencies:
+
+          ## 📸 Screenshots / Logs (if applicable)
+          Any relevant output.
+          \`\`\`
+
+          **For Feature Requests / Enhancements:**
+          \`\`\`
+          ## ✨ Description
+          Clear description of the proposed feature or improvement.
+
+          ## 🎯 Motivation
+          Why is this needed? What problem does it solve?
+
+          ## 📐 Proposed Solution
+          How should this be implemented? Include technical details if possible.
+
+          ## 🔄 Alternatives Considered (if any)
+          Other approaches that were considered.
+
+          ## 📎 Additional Context
+          Links, references, or screenshots.
+          \`\`\`
+
+          **For other issue types use a sensible structure with emoji section headers.**
+
+          ──────────────────────────────────────────────
+          STEP 6 — ANALYZE CODE FOR REFERENCES
+          ──────────────────────────────────────────────
+          - Based on the issue topic, search the repository code for relevant files, functions,
+            classes, or configuration that relate to the issue.
+          - If you find relevant code references, add a section at the end of the body:
+
+            ## 🔍 Relevant Code References
+            - \`path/to/file.py\` — Brief description of why this file is relevant
+            - \`path/to/another.py:L42\` — Specific function or line related to this issue
+
+          - If the issue mentions a technology or library, check if it's already used in the project
+            and note the current version or usage.
+          - Add links to official documentation if they help clarify the issue:
+
+            ## 📚 Useful Documentation
+            - [Library Name — Topic](https://docs.example.com/relevant-page)
+
+          ──────────────────────────────────────────────
+          STEP 7 — ADD CREDIT FOOTER
+          ──────────────────────────────────────────────
+          At the very end of the body, add:
+
+          ---
+          > ✍️ *This issue was automatically enhanced by Copilot CLI. Original author: @$ISSUE_AUTHOR*
+
+          ──────────────────────────────────────────────
+          STEP 8 — UPDATE THE ISSUE
+          ──────────────────────────────────────────────
+          Use the GitHub MCP Server to UPDATE issue #$ISSUE_NUMBER with:
+          - The new enhanced title
+          - The new enhanced body
+          DO NOT create a new issue. UPDATE the existing one.
+
+          ──────────────────────────────────────────────
+          STEP 9 — ASSIGN LABELS
+          ──────────────────────────────────────────────
+          - From the label list you fetched in Step 2, pick 1-3 labels that best match this issue.
+          - Use the GitHub MCP Server to assign those labels to issue #$ISSUE_NUMBER.
+          - Every issue MUST have at least one label.
+
+          ──────────────────────────────────────────────
+          STEP 10 — ADD A FRIENDLY COMMENT
+          ──────────────────────────────────────────────
+          Use the GitHub MCP Server to add a comment on issue #$ISSUE_NUMBER with a brief,
+          friendly summary of what was improved. Example:
+
+          > 🤖 **Issue enhanced!** I've improved this issue by:
+          > - Translated from Spanish to English
+          > - Added a descriptive emoji title
+          > - Structured the body with clear sections
+          > - Added relevant code references
+          >
+          > Feel free to edit if anything needs adjusting!
+
+          IMPORTANT GUIDELINES:
+          - NEVER change the meaning or intent of the original issue
+          - ALWAYS preserve all technical details from the original
+          - If the original issue is already well-written in English with good structure, make only minimal improvements
+          - Be helpful, not intrusive — enhance clarity without adding fluff
+          - If the issue body is empty, infer what you can from the title and code analysis, but mark inferred sections clearly
+          " --allow-all-tools --model claude-opus-4.6
+
+          echo "✅ Issue #$ISSUE_NUMBER enhanced successfully"
