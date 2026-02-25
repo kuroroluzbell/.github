@@ -34,7 +34,7 @@ jobs:
   enhance-issue:
     name: ✍️ Enhance Issue with Gemini
     runs-on: ubuntu-latest
-    st#eps:
+    steps:
       #- name: 🔐 Verify author is repo owner
       #  id: author_check
       #  env:
