@@ -58,7 +58,14 @@ jobs:
       #      echo "Skipping: author $author is not repository owner $REPO_OWNER."
       #    fi
 
-      - name: 👾 Set up Python
+      - name: � Checkout Central Scripts
+        uses: actions/checkout@v4
+        with:
+          repository: fvalenzuela-dev/.github
+          path: .github-central
+          sparse-checkout: .github/scripts
+
+      - name: �👾 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -67,7 +74,7 @@ jobs:
         run: pip install requests
 
       - name: 🤖 Enhance Issue with Gemini
-       env:
+        env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
@@ -75,4 +82,4 @@ jobs:
           ISSUE_BODY: ${{ inputs.issue_body || github.event.issue.body }}
           ISSUE_AUTHOR: ${{ inputs.issue_author || github.event.issue.user.login }}
           REPO: ${{ github.repository }}
-        run: python .github/scripts/improve_issue.py
+        run: python .github-central/.github/scripts/improve_issue.py
