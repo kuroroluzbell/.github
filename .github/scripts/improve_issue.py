@@ -1,0 +1,81 @@
+name: ✍️ Issue Quality Enhancer
+
+on:
+  issues:
+    types: [opened]
+  workflow_call:
+    inputs:
+      issue_number:
+        description: 'Issue number to enhance'
+        required: true
+        type: string
+      issue_title:
+        description: 'Issue title'
+        required: true
+        type: string
+      issue_body:
+        description: 'Issue body'
+        required: false
+        type: string
+        default: ''
+      issue_author:
+        description: 'Issue author login'
+        required: true
+        type: string
+    secrets:
+      GEMINI_API_KEY:
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  enhance-issue:
+    name: ✍️ Enhance Issue with Gemini
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔐 Verify author is repo owner
+        id: author_check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          INPUT_AUTHOR: ${{ inputs.issue_author }}
+        run: |
+          author="$ISSUE_AUTHOR"
+          if [ "$EVENT_NAME" = "workflow_call" ]; then
+            author="$INPUT_AUTHOR"
+          fi
+
+          allowed="false"
+          if [ "$author" = "$REPO_OWNER" ]; then
+            allowed="true"
+          fi
+
+          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+          if [ "$allowed" != "true" ]; then
+            echo "Skipping: author $author is not repository owner $REPO_OWNER."
+          fi
+
+      - name: 👾 Set up Python
+        if: ${{ steps.author_check.outputs.allowed == 'true' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        if: ${{ steps.author_check.outputs.allowed == 'true' }}
+        run: pip install requests
+
+      - name: 🤖 Enhance Issue with Gemini
+        if: ${{ steps.author_check.outputs.allowed == 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
+          ISSUE_TITLE: ${{ inputs.issue_title || github.event.issue.title }}
+          ISSUE_BODY: ${{ inputs.issue_body || github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ inputs.issue_author || github.event.issue.user.login }}
+          REPO: ${{ github.repository }}
+        run: python .github/scripts/improve_issue.py
