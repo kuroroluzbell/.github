@@ -34,29 +34,29 @@ jobs:
   enhance-issue:
     name: ✍️ Enhance Issue with Gemini
     runs-on: ubuntu-latest
-    steps:
-      - name: 🔐 Verify author is repo owner
-        id: author_check
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
-          INPUT_AUTHOR: ${{ inputs.issue_author }}
-        run: |
-          author="$ISSUE_AUTHOR"
-          if [ "$EVENT_NAME" = "workflow_call" ]; then
-            author="$INPUT_AUTHOR"
-          fi
+    st#eps:
+      #- name: 🔐 Verify author is repo owner
+      #  id: author_check
+      #  env:
+      #    EVENT_NAME: ${{ github.event_name }}
+      #    REPO_OWNER: ${{ github.repository_owner }}
+      #    ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      #    INPUT_AUTHOR: ${{ inputs.issue_author }}
+      #  run: |
+      #    author="$ISSUE_AUTHOR"
+      #    if [ "$EVENT_NAME" = "workflow_call" ]; then
+      #      author="$INPUT_AUTHOR"
+      #    fi
 
-          allowed="false"
-          if [ "$author" = "$REPO_OWNER" ]; then
-            allowed="true"
-          fi
+      #    allowed="false"
+      #    if [ "$author" = "$REPO_OWNER" ]; then
+      #      allowed="true"
+      #    fi
 
-          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
-          if [ "$allowed" != "true" ]; then
-            echo "Skipping: author $author is not repository owner $REPO_OWNER."
-          fi
+      #    echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+      #    if [ "$allowed" != "true" ]; then
+      #      echo "Skipping: author $author is not repository owner $REPO_OWNER."
+      #    fi
 
       - name: 👾 Set up Python
         if: ${{ steps.author_check.outputs.allowed == 'true' }}
