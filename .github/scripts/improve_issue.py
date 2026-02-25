@@ -1,81 +1,67 @@
-name: ✍️ Issue Quality Enhancer
+import os
+import requests
+import json
 
-on:
-  issues:
-    types: [opened]
-  workflow_call:
-    inputs:
-      issue_number:
-        description: 'Issue number to enhance'
-        required: true
-        type: string
-      issue_title:
-        description: 'Issue title'
-        required: true
-        type: string
-      issue_body:
-        description: 'Issue body'
-        required: false
-        type: string
-        default: ''
-      issue_author:
-        description: 'Issue author login'
-        required: true
-        type: string
-    secrets:
-      GEMINI_API_KEY:
-        required: true
+def call_gemini_api(title, body):
+    # Construye tu prompt aquí, puedes copiar el prompt detallado que usas con Copilot CLI
+    instructions = f"""
+You are an expert Issue Quality Enhancer for a public GitHub repo.
+Your job is to take a newly opened issue and improve its quality so it is clear, detailed, well-structured, and consistent with the best open source standards.
 
-permissions:
-  contents: read
-  issues: write
+Rules:
+- Start title with relevant emoji (🐛 for bugs, ✨ for features, etc.), 5-12 words after emoji, imperative mood.
+- Enhance body: Structure as bug report or feature template, use emoji headers, add code references if present, and append a credit footer (original author).
+- Language: English only; translate if needed.
+- DO NOT change technical meaning. Minimal change if well structured.
+- Provide output as JSON with `title` and `body`.
 
-jobs:
-  enhance-issue:
-    name: ✍️ Enhance Issue with Gemini
-    runs-on: ubuntu-latest
-    steps:
-      - name: 🔐 Verify author is repo owner
-        id: author_check
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
-          INPUT_AUTHOR: ${{ inputs.issue_author }}
-        run: |
-          author="$ISSUE_AUTHOR"
-          if [ "$EVENT_NAME" = "workflow_call" ]; then
-            author="$INPUT_AUTHOR"
-          fi
+Original Details:
+- Title: {title}
+- Body: {body}
+"""
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "contents": [{"parts": [{"text": instructions}]}]
+    }
+    params = {"key": os.environ["GEMINI_API_KEY"]}
+    r = requests.post(url, json=data, params=params, headers=headers)
+    r.raise_for_status()
+    raw = r.json()
+    try:
+        # Gemini responde en texto plano, busca el JSON dentro del texto
+        gemini_text = raw["candidates"][0]["content"]["parts"][0]["text"]
+        # Extraer JSON delimitado con ``` o { ... }
+        start = gemini_text.find('{')
+        end = gemini_text.rfind('}')
+        if start >= 0 and end > start:
+            extracted = gemini_text[start:end+1]
+            improved = json.loads(extracted)
+        else:
+            # Alternativamente solo reescribe el title/body si no viene JSON
+            improved = {"title": title, "body": f"{gemini_text}\n\n---\n> ✍️ *This issue was automatically enhanced by Gemini. Original author: @{os.environ['ISSUE_AUTHOR']}*"}
+    except Exception as e:
+        improved = {"title": title, "body": body}
+    return improved
 
-          allowed="false"
-          if [ "$author" = "$REPO_OWNER" ]; then
-            allowed="true"
-          fi
+def update_issue(repo, issue_number, token, title, body):
+    url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
+    data = {"title": title, "body": body}
+    r = requests.patch(url, json=data, headers=headers)
+    r.raise_for_status()
 
-          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
-          if [ "$allowed" != "true" ]; then
-            echo "Skipping: author $author is not repository owner $REPO_OWNER."
-          fi
+def main():
+    repo = os.environ["REPO"]
+    issue_number = os.environ["ISSUE_NUMBER"]
+    token = os.environ["GH_TOKEN"]
+    title = os.environ["ISSUE_TITLE"]
+    body = os.environ["ISSUE_BODY"]
+    print(f"Enhancing issue #{issue_number}...")
 
-      - name: 👾 Set up Python
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+    improved = call_gemini_api(title, body)
+    update_issue(repo, issue_number, token, improved["title"], improved["body"])
+    print(f"Issue #{issue_number} enhanced with Gemini.")
 
-      - name: 📦 Install dependencies
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
-        run: pip install requests
-
-      - name: 🤖 Enhance Issue with Gemini
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
-          ISSUE_TITLE: ${{ inputs.issue_title || github.event.issue.title }}
-          ISSUE_BODY: ${{ inputs.issue_body || github.event.issue.body }}
-          ISSUE_AUTHOR: ${{ inputs.issue_author || github.event.issue.user.login }}
-          REPO: ${{ github.repository }}
-        run: python .github/scripts/improve_issue.py
+if __name__ == "__main__":
+    main()
