@@ -59,18 +59,15 @@ jobs:
       #    fi
 
       - name: 👾 Set up Python
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: 📦 Install dependencies
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
         run: pip install requests
 
       - name: 🤖 Enhance Issue with Gemini
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
-        env:
+       env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
