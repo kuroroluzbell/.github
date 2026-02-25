@@ -19,7 +19,7 @@ Original Details:
 - Title: {title}
 - Body: {body}
 """
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
     headers = {"Content-Type": "application/json"}
     data = {
         "contents": [{"parts": [{"text": instructions}]}]
