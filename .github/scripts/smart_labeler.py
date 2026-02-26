@@ -68,9 +68,10 @@ def add_labels_to_item(repo, item_number, token, labels):
 
 def main():
     repo = os.environ["REPO"]
-    item_number = os.environ.get("ITEM_NUMBER", os.environ.get("PR_NUMBER"))
+    item_number = os.environ.get("ITEM_NUMBER")
     token = os.environ["GH_TOKEN"]
-    item_title = os.environ.get("ITEM_TITLE", os.environ.get("PR_TITLE", ""))
+    item_title = os.environ.get("ITEM_TITLE", "")
+    item_body = os.environ.get("ITEM_BODY", "")
     item_type = os.environ.get("ITEM_TYPE", "pull_request")
 
     if not item_number:
@@ -86,11 +87,14 @@ def main():
         except Exception as e:
             print(f"Could not get PR diff: {e}")
     else:
-        try:
-            issue_data = get_issue(repo, item_number, token)
-            context = issue_data.get("body", "") or "No description provided."
-        except Exception as e:
-            print(f"Could not get Issue data: {e}")
+        if item_body:
+            context = item_body
+        else:
+            try:
+                issue_data = get_issue(repo, item_number, token)
+                context = issue_data.get("body", "") or "No description provided."
+            except Exception as e:
+                print(f"Could not get Issue data: {e}")
 
     if not context.strip() and item_type == "pull_request":
         print("No diff found, skipping labels.")

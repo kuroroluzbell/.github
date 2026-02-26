@@ -66,7 +66,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ITEM_TYPE: ${{ inputs.item_type || (github.event_name == 'issues' && 'issue' || 'pull_request') }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
-          PR_TITLE: ${{ inputs.pr_title || github.event.pull_request.title }}
+          ITEM_NUMBER: ${{ inputs.item_number || github.event.issue.number || github.event.pull_request.number }}
+          ITEM_TITLE: ${{ inputs.item_title || github.event.issue.title || github.event.pull_request.title }}
+          ITEM_BODY: ${{ inputs.item_body || github.event.issue.body || github.event.pull_request.body }}
           REPO: ${{ github.repository }}
         run: python .github-central/.github/scripts/smart_labeler.py  
