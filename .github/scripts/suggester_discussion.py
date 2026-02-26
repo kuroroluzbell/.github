@@ -38,11 +38,23 @@ Return ONLY a JSON object with:
     try:
         gemini_text = raw["candidates"][0]["content"]["parts"][0]["text"]
         start = gemini_text.find('{')
-        end = gemini_text.rfind('}')
-        if start >= 0 and end > start:
-            return json.loads(gemini_text[start:end+1])
+        if start >= 0:
+            depth = 0
+            end = start
+            for i, char in enumerate(gemini_text[start:], start):
+                if char == '{':
+                    depth += 1
+                elif char == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+            if end > start:
+                return json.loads(gemini_text[start:end+1])
     except Exception as e:
         print(f"Error parsing Gemini: {e}")
+        if 'raw' in locals():
+            print(f"Raw response: {raw}")
     return None
 
 def create_discussion(repo, token, title, body):
