@@ -9,10 +9,22 @@ def get_pr_diff(repo, pr_number, token):
     r.raise_for_status()
     return r.text
 
-def call_gemini(diff_text, pr_title):
+def get_issue(repo, issue_number, token):
+    url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    return r.json()
+
+def call_gemini(context, title, item_type):
+    if item_type == "pull_request":
+        prompt_context = f"PR Title: {title}\nDIFF:\n{context[:15000]}"
+    else:
+        prompt_context = f"Issue Title: {title}\nISSUE BODY:\n{context[:15000]}"
+
     instructions = f"""
-You are a Smart Labeler for GitHub Pull Requests.
-Analyze the following PR title and diff, and decide which labels apply to this PR.
+You are a Smart Labeler for GitHub {item_type.replace('_', ' ').title()}s.
+Analyze the following title and content, and decide which labels apply.
 Choose ONLY from these common labels:
 - "🐛 bug"
 - "✨ enhancement"
@@ -22,10 +34,10 @@ Choose ONLY from these common labels:
 - "🔧 config"
 - "🚀 deployment"
 - "🔒 security"
+- "❓ help wanted"
+- "💬 discussion"
 
-PR Title: {pr_title}
-DIFF:
-{diff_text[:15000]}
+{prompt_context}
 
 Respond ONLY with a valid JSON array of strings containing the exact labels. Example:
 ["🐛 bug", "🧪 test"]
@@ -47,8 +59,8 @@ Respond ONLY with a valid JSON array of strings containing the exact labels. Exa
         print(f"Error parsing Gemini: {e}")
     return []
 
-def add_labels_to_pr(repo, pr_number, token, labels):
-    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/labels"
+def add_labels_to_item(repo, item_number, token, labels):
+    url = f"https://api.github.com/repos/{repo}/issues/{item_number}/labels"
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
     data = {"labels": labels}
     r = requests.post(url, json=data, headers=headers)
@@ -56,22 +68,41 @@ def add_labels_to_pr(repo, pr_number, token, labels):
 
 def main():
     repo = os.environ["REPO"]
-    pr_number = os.environ["PR_NUMBER"]
+    item_number = os.environ.get("ITEM_NUMBER", os.environ.get("PR_NUMBER"))
     token = os.environ["GH_TOKEN"]
-    pr_title = os.environ.get("PR_TITLE", "")
+    item_title = os.environ.get("ITEM_TITLE", os.environ.get("PR_TITLE", ""))
+    item_type = os.environ.get("ITEM_TYPE", "pull_request")
 
-    diff_text = get_pr_diff(repo, pr_number, token)
-    if not diff_text.strip():
+    if not item_number:
+        print("Error: ITEM_NUMBER or PR_NUMBER must be provided.")
+        return
+
+    print(f"Analyzing {item_type} #{item_number}: {item_title}")
+
+    context = ""
+    if item_type == "pull_request":
+        try:
+            context = get_pr_diff(repo, item_number, token)
+        except Exception as e:
+            print(f"Could not get PR diff: {e}")
+    else:
+        try:
+            issue_data = get_issue(repo, item_number, token)
+            context = issue_data.get("body", "") or "No description provided."
+        except Exception as e:
+            print(f"Could not get Issue data: {e}")
+
+    if not context.strip() and item_type == "pull_request":
         print("No diff found, skipping labels.")
         return
 
-    labels = call_gemini(diff_text, pr_title)
+    labels = call_gemini(context, item_title, item_type)
     if not labels:
         print("No labels suggested.")
         return
 
     print(f"Adding labels: {labels}")
-    add_labels_to_pr(repo, pr_number, token, labels)
+    add_labels_to_item(repo, item_number, token, labels)
     print("✅ Smart labeling completed.")
 
 if __name__ == "__main__":
