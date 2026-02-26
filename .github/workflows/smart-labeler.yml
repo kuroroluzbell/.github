@@ -1,6 +1,8 @@
-name: 📚 Continuous Documentation
+name: 🧠 Smart Labeler
 
 on:
+  pull_request:
+    types: [opened, synchronize]
   workflow_call:
     inputs:
       pr_number:
@@ -11,206 +13,46 @@ on:
         description: 'Pull request title'
         required: true
         type: string
-      pr_author:
-        description: 'Pull request author login'
-        required: true
-        type: string
-      base_ref:
-        description: 'Base branch of the PR'
-        required: true
-        type: string
-      head_ref:
-        description: 'Head branch of the PR'
-        required: true
-        type: string
     secrets:
-      COPILOT_PAT:
+      GEMINI_API_KEY:
         required: true
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
+  issues: write
 
 jobs:
-  continuous-docs:
-    name: 📚 Check & Improve Documentation
+  smart-labeler:
+    name: 🧠 Smart Label PR
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🔐 Verify author is repo owner
-        id: author_check
-        env:
-          REPO_OWNER: ${{ github.repository_owner }}
-          INPUT_AUTHOR: ${{ inputs.pr_author }}
-        run: |
-          allowed="false"
-          if [ "$INPUT_AUTHOR" = "$REPO_OWNER" ]; then
-            allowed="true"
-          fi
-
-          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
-          if [ "$allowed" != "true" ]; then
-            echo "Skipping: author $INPUT_AUTHOR is not repository owner $REPO_OWNER."
-          fi
-
       - name: 📥 Checkout PR branch
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.head_ref || github.event.pull_request.head.ref }}
-          token: ${{ secrets.COPILOT_PAT }}
 
-      - name: 📦 Install GitHub Copilot CLI
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
-        run: |
-          curl -fsSL https://gh.io/copilot-install | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: 🗂️ Checkout Central Scripts
+        uses: actions/checkout@v4
+        with:
+          repository: fvalenzuela-dev/.github
+          path: .github-central
+          sparse-checkout: .github/scripts
 
-      - name: 📚 Analyze code changes and documentation drift
-        if: ${{ steps.author_check.outputs.allowed == 'true' }}
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: pip install requests
+
+      - name: 🧠 Analyze PR and Add Labels
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
           PR_TITLE: ${{ inputs.pr_title || github.event.pull_request.title }}
-          PR_AUTHOR: ${{ inputs.pr_author || github.event.pull_request.user.login }}
-          BASE_REF: ${{ inputs.base_ref || github.event.pull_request.base.ref }}
-          HEAD_REF: ${{ inputs.head_ref || github.event.pull_request.head.ref }}
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-
-          copilot -p "
-          You are an expert Continuous Documentation assistant for the repository '${{ github.repository }}'.
-          Your job is to analyze code changes in a pull request, detect documentation drift,
-          suggest README and API doc improvements, and nudge the PR author when explanations
-          no longer match the actual implementation.
-
-          PULL REQUEST DETAILS:
-          - Number: #$PR_NUMBER
-          - Title: $PR_TITLE
-          - Author: @$PR_AUTHOR
-          - Base branch: $BASE_REF
-          - Head branch: $HEAD_REF
-
-          Follow these steps IN ORDER:
-
-          ──────────────────────────────────────────────
-          STEP 1 — UNDERSTAND THE PROJECT
-          ──────────────────────────────────────────────
-          - Read the repository README (and any localized versions like README.es.md) to understand
-            what this project is about and what it documents.
-          - Read AGENTS.md or CONTRIBUTING.md if they exist.
-          - Scan the project structure to identify where documentation lives:
-            README files, docs/ folder, API docs, JSDoc/docstrings, inline comments, etc.
-
-          ──────────────────────────────────────────────
-          STEP 2 — ANALYZE THE PR CHANGES
-          ──────────────────────────────────────────────
-          - Use the GitHub MCP Server to get the full diff of PR #$PR_NUMBER.
-          - Identify ALL files changed, added, or deleted.
-          - Categorize the changes:
-            a) New features or public APIs added
-            b) Existing features or APIs modified (signature changes, behavior changes)
-            c) Features or APIs removed/deprecated
-            d) Configuration changes (env vars, settings, dependencies)
-            e) Workflow or CI/CD changes
-            f) Structural changes (files renamed, moved, or reorganized)
-
-          ──────────────────────────────────────────────
-          STEP 3 — DETECT DOCUMENTATION DRIFT
-          ──────────────────────────────────────────────
-          For each change identified in Step 2, check whether existing documentation
-          still accurately describes the code. Look for:
-
-          a) **README drift**:
-             - Does the README mention features, commands, APIs, or file paths that have changed?
-             - Does the project structure section match the actual file tree?
-             - Are installation or usage instructions still correct?
-             - Are config examples or environment variable lists still accurate?
-
-          b) **API / docstring drift**:
-             - Have function signatures changed without updating their docstrings/JSDoc/type hints?
-             - Have parameters been added, removed, or renamed without updating documentation?
-             - Have return types or error behaviors changed?
-
-          c) **Inline comment drift**:
-             - Are there comments that describe logic which no longer matches the code below them?
-             - Are TODO/FIXME/HACK comments that are now resolved but still present?
-
-          d) **Config & dependency drift**:
-             - Have new dependencies been added without documenting them in prerequisites?
-             - Have environment variables changed without updating .env.example or the README?
-
-          e) **Missing documentation for new code**:
-             - New public functions/classes/endpoints without any documentation
-             - New workflows or scripts without usage instructions
-             - New config options without explanation
-
-          ──────────────────────────────────────────────
-          STEP 4 — FIX DOCUMENTATION DIRECTLY
-          ──────────────────────────────────────────────
-          For each drift or gap found, EDIT THE FILES DIRECTLY in the working directory:
-
-          a) **README drift**: Edit README.md (and localized versions like README.es.md)
-             to fix outdated sections — project structure, feature lists, usage instructions,
-             config examples, environment variable references, etc.
-
-          b) **API / docstring drift**: Edit the source files to update docstrings, JSDoc,
-             type hints, or inline comments so they match the new code behavior.
-
-          c) **Stale comments**: Remove or update TODO/FIXME/HACK comments that are now resolved.
-
-          d) **Config & dependency docs**: Update .env.example, prerequisites sections,
-             or setup instructions to reflect new dependencies or config changes.
-
-          e) **Missing documentation for new code**: Add docstrings, README sections,
-             or usage instructions for newly added public APIs, workflows, or scripts.
-
-          Prioritize edits by impact:
-            🔴 Critical — documentation is actively misleading (wrong instructions, wrong API)
-            🟡 Important — documentation is incomplete or stale but not harmful
-            🟢 Nice to have — minor wording improvements, typo fixes, clarity enhancements
-
-          Focus on 🔴 and 🟡 items. Only fix 🟢 items if there are few total changes.
-
-          ──────────────────────────────────────────────
-          STEP 5 — COMMIT AND PUSH CHANGES
-          ──────────────────────────────────────────────
-          After editing the files, use the GitHub MCP Server to push the changes
-          to the HEAD branch of the PR ($HEAD_REF) with a commit message like:
-
-            📚 docs: update documentation to match code changes
-
-          Only commit files that you actually modified. If no documentation drift was found,
-          DO NOT create an empty commit.
-
-          ──────────────────────────────────────────────
-          STEP 6 — LEAVE A SUMMARY COMMENT
-          ──────────────────────────────────────────────
-          Use the GitHub MCP Server to add a SHORT comment on PR #$PR_NUMBER:
-
-          - If you made changes:
-            > 📚 **Documentation updated!**
-            >
-            > I detected documentation drift and pushed a commit to fix it:
-            > - (list each file changed and a one-line summary of what was updated)
-            >
-            > Please review the changes and adjust if needed.
-            >
-            > ---
-            > 🤖 *Auto-updated by Copilot Continuous Documentation*
-
-          - If everything was already in sync:
-            > 📚 **Docs are in sync!** No documentation drift detected for this PR. Great job @$PR_AUTHOR! 👏
-
-          IMPORTANT GUIDELINES:
-          - NEVER change the meaning or intent of existing documentation — only fix drift
-          - Respect the project's existing documentation style, language, and formatting
-          - If the project has docs in multiple languages (e.g. README.md and README.es.md), update ALL of them
-          - Only fix documentation issues directly caused by THIS PR's changes
-          - Don't rewrite well-written docs — make minimal, targeted fixes
-          - If the PR already includes correct documentation updates, just confirm they look good
-          - Be conservative — when in doubt, skip a marginal change rather than risk breaking good docs
-          " --allow-all-tools --model claude-opus-4.6
-
-          echo "✅ Documentation analysis completed for PR #$PR_NUMBER"
+          REPO: ${{ github.repository }}
+        run: python .github-central/.github/scripts/smart_labeler.py

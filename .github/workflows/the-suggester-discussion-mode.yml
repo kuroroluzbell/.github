@@ -1,8 +1,6 @@
 name: 💡 Copilot Suggester (Discussion Mode)
 
 on:
-  # schedule:
-  #   - cron: "0 9 * * 1" # Monday 9:00 UTC
   workflow_dispatch:
     inputs:
       suggestion_type:
@@ -15,15 +13,7 @@ on:
           - security
           - performance
           - refactoring
-          - testing
-          - documentation
           - architecture
-          - configuration
-          - bugs
-          - maintainability
-          - ux-design
-          - favicon
-          - readme
   workflow_call:
     inputs:
       suggestion_type:
@@ -32,7 +22,7 @@ on:
         type: string
         default: 'all'
     secrets:
-      COPILOT_PAT:
+      GEMINI_API_KEY:
         required: true
 
 permissions:
@@ -48,126 +38,25 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 📦 Install GitHub Copilot CLI
-        run: |
-          curl -fsSL https://gh.io/copilot-install | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: �️ Checkout Central Scripts
+        uses: actions/checkout@v4
+        with:
+          repository: fvalenzuela-dev/.github
+          path: .github-central
+          sparse-checkout: .github/scripts
 
-      - name: 🔧 Configure Playwright MCP Server
-        run: |
-          mkdir -p ~/.copilot
-          cat > ~/.copilot/mcp-config.json << 'EOF'
-          {
-            "servers": {
-              "playwright": {
-                "command": "npx",
-                "args": ["@playwright/mcp@latest"]
-              }
-            }
-          }
-          EOF
-          echo "✅ Playwright MCP Server configured"
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: 🤖 Analyze code and create discussions with Copilot CLI
+      - name: 📦 Install dependencies
+        run: pip install requests
+
+      - name: 🤖 Analyze code and create discussions
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SUGGESTION_TYPE: ${{ inputs.suggestion_type || 'all' }}
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-
-          # Build the prompt based on suggestion type
-          if [ "$SUGGESTION_TYPE" = "all" ]; then
-            CATEGORIES="Security, Performance, Refactoring, Testing, Documentation, Architecture, Configuration, Bugs, Maintainability, UX/Design, Favicon, and README improvements"
-          else
-            CATEGORIES="$SUGGESTION_TYPE"
-          fi
-
-          # Copilot CLI analyzes the repo and creates discussions using its GitHub MCP Server
-          copilot -p "
-          You are analyzing this repository to find improvement suggestions. Follow these steps:
-
-          1. FIRST: Use the GitHub MCP Server to list ALL available discussion categories in this repository.
-             Look specifically for a category named 'Ideas' or similar (like '💡 Ideas', 'Feature requests', etc.).
-             SAVE the category ID - you MUST use it when creating discussions.
-
-          2. SECOND: Use the GitHub MCP Server to review the last 5 discussions in this repository to understand:
-             - The title structure (emojis, prefixes, etc.)
-             - The body structure (sections, formatting)
-
-          3. THIRD: Build and run the Angular application to analyze its UI:
-             a) Run 'npm install' to install dependencies
-             b) Run 'npm run build' to build the application
-             c) Start a local server to serve the built application (use 'npx serve dist/angular-tour-of-heroes/browser -l 4200' or similar)
-             d) Use the Playwright MCP Server to navigate to the running application
-             e) Take screenshots of:
-                - The main page (dashboard)
-                - The Heroes list page
-                - A hero detail page (click on a hero)
-                - The search functionality in action
-             f) Analyze the screenshots for:
-                - Overall visual design quality (colors, spacing, typography, modern look)
-                - Usability issues (button sizes, contrast, responsive design)
-                - Missing UI elements (loading states, error states, empty states)
-                - Accessibility concerns (color contrast, focus indicators)
-                - Suggestions for improving the Look & Feel
-
-          4. FOURTH: Check if the application has a custom favicon:
-             - Look for favicon files in src/assets or src/ folder
-             - Check index.html for favicon link tags
-             - If no custom favicon exists or it's the default Angular favicon, suggest creating one
-
-          5. FIFTH: Analyze the README.md file:
-             - Check if it has proper project description
-             - Check if it includes screenshots of the application (use the ones you took!)
-             - Check if it has installation instructions
-             - Check if it has usage instructions
-             - Check if it has contribution guidelines
-             - Suggest improvements including adding the screenshots you captured
-
-          6. SIXTH: Analyze all the code in this repository looking for improvements in: $CATEGORIES
-
-          7. SEVENTH: Before creating any discussion, use the GitHub MCP Server to search for existing ISSUES 
-             in this repository that might be related to each suggestion.
-             - Search issues using relevant keywords from your suggestion
-             - Check both open AND closed issues
-             - If an issue already exists that covers the same topic/improvement, DO NOT create a discussion for it
-             - Only proceed to create a discussion if NO related issue exists
-
-          8. EIGHTH: For each important suggestion that has NO related existing issue, create a DISCUSSION in this repository.
-             CRITICAL REQUIREMENTS for each discussion:
-             - Category: Use the 'Ideas' category (or equivalent found in step 1)
-             - Title: Follow EXACTLY the same style as existing discussions
-             - Language: If there are no prior discussions, write in English. If there are prior discussions, match the language used in those discussions.
-             - Body: Use the SAME structure as existing discussions
-             - Include a section explaining what the suggestion is and why it would improve the codebase
-             - For UX/Design suggestions, reference the screenshots you took and describe what you observed
-             - For README suggestions, include recommendations for adding screenshots and better documentation
-             - Footer: Include 'This discussion was automatically generated by Copilot CLI'
-             
-             ⚠️ LABELS ARE MANDATORY ⚠️
-             After creating each discussion, you MUST add labels to it using the GitHub MCP Server.
-             - First, list available labels in the repository
-             - If the label '🤖 copilot-suggestion' does NOT exist yet, CREATE it first (use color '7057ff' and description 'Automatically generated suggestion by Copilot')
-             - EVERY discussion MUST include the '🤖 copilot-suggestion' label. This is non-negotiable and allows filtering all Copilot-generated discussions later.
-             - Then, add additional labels based on the suggestion type (e.g., 'enhancement', 'security', 'performance', 'documentation', 'design', etc.)
-             - Every discussion MUST have at least the '🤖 copilot-suggestion' label. DO NOT skip this step!
-
-          PRIORITY SUGGESTIONS (create discussions for these if issues don't exist):
-          1. Custom favicon - Every app should have a unique favicon, not the default Angular one
-          2. README with screenshots - The README should showcase the app with real screenshots
-          3. Look & Feel improvements - Based on your Playwright analysis of the running app
-
-          ⚠️ QUALITY OVER QUANTITY ⚠️
-          - Only create discussions for suggestions that provide REAL VALUE to the project
-          - Do NOT create discussions just to create something - if the codebase is already in good shape, it's OK to create zero discussions
-          - Skip minor nitpicks, trivial improvements, or changes that don't significantly impact the project
-          - A suggestion is worth a discussion ONLY if it fixes a real problem, improves security, significantly enhances UX, or adds important missing functionality
-          - If you don't find any meaningful suggestions, simply report that the codebase is in good condition and no discussions were created
-
-          Create individual discussions for each important suggestion, not a single discussion with everything.
-          Use the GitHub MCP Server's create_discussion tool to create each discussion in the 'Ideas' category.
-          REMEMBER: Skip any suggestion that already has a related issue in the repository!
-          CRITICAL: After creating each discussion, you MUST add labels to it. Discussions without labels are NOT acceptable!
-          " --allow-all-tools
-
-          echo "✅ Copilot CLI analysis completed"
+          REPO: ${{ github.repository }}
+        run: python .github-central/.github/scripts/suggester_discussion.py
