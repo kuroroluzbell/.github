@@ -1,0 +1,12 @@
+name: Check Source Branch
+on:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - if: github.base_ref == 'main' && github.head_ref != 'develop'
+        run: |
+          echo "Error: Solo PRs desde 'develop' hacia 'main' son permitidos."
+          exit 1
