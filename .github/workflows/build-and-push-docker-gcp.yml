@@ -52,6 +52,13 @@ on:
         required: false
         type: string
         default: "us-central1"
+      build_args:
+        description: |
+          Docker build arguments to pass to the build step.
+          Example: ENV_FILE=.env.prod
+        required: false
+        type: string
+        default: ""
     secrets:
       gcp_project_id:
         required: true
@@ -103,6 +110,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ inputs.build_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
