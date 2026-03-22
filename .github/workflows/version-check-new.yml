@@ -35,6 +35,8 @@ jobs:
             VERSION=$(node -p "require('./${{ inputs.version_file }}').version")
           elif [[ "${{ inputs.version_file }}" == "pom.xml" ]]; then
             VERSION=$(grep -m1 '<version>' ${{ inputs.version_file }} | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+          elif [[ "${{ inputs.version_file }}" == "VERSION" ]]; then
+            VERSION=$(cat ${{ inputs.version_file }})
           else
             echo "Unsupported file: ${{ inputs.version_file }}"
             exit 1
