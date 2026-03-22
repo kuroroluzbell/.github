@@ -98,7 +98,7 @@ on:
 
 jobs:
   report-coverage:
-    name: Subir Cobertura a Codacy
+    name: Upload Coverage to Codacy
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
